@@ -1,3 +1,4 @@
+
 export function calculateRisk({
   capital,
   riskPercent,
@@ -13,7 +14,7 @@ export function calculateRisk({
   stopLossPrice = Number(stopLossPrice);
   riskReward = Number(riskReward);
 
-  // Basic validation
+  // Validate inputs
   if (
     !Number.isFinite(capital) ||
     !Number.isFinite(riskPercent) ||
@@ -34,85 +35,63 @@ export function calculateRisk({
     throw new Error("All values must be greater than 0.");
   }
 
-  // ----------------------------------------
-  // LONG VALIDATION
-  // ----------------------------------------
-
-  if (tradeType === "long" && stopLossPrice >= entryPrice) {
-    throw new Error(
-      "Invalid Stop Loss: For a Long trade, Stop Loss must be below Entry Price."
-    );
+  if (!["long", "short"].includes(tradeType)) {
+    throw new Error("Please select Long or Short.");
   }
 
-  // ----------------------------------------
-  // SHORT VALIDATION
-  // ----------------------------------------
+  // Validate stop-loss direction
+  if (tradeType === "long" && stopLossPrice >= entryPrice) {
+    throw new Error(
+      "For a Long trade, Stop Loss must be below Entry Price."
+    );
+  }
 
   if (tradeType === "short" && stopLossPrice <= entryPrice) {
     throw new Error(
-      "Invalid Stop Loss: For a Short trade, Stop Loss must be above Entry Price."
+      "For a Short trade, Stop Loss must be above Entry Price."
     );
   }
 
-  // ----------------------------------------
-  // RISK AMOUNT
-  // ----------------------------------------
-
+  // Calculate allowed risk
   const riskAmount = capital * (riskPercent / 100);
 
-  // ----------------------------------------
-  // SL DISTANCE
-  // ----------------------------------------
-
+  // Calculate risk per share
   const slPoints = Math.abs(entryPrice - stopLossPrice);
 
-  if (slPoints === 0) {
-    throw new Error(
-      "Entry Price and Stop Loss cannot be the same."
-    );
-  }
+  // Quantity allowed by risk limit
+  const riskBasedQuantity = Math.floor(
+    riskAmount / slPoints
+  );
 
-  // ----------------------------------------
-  // POSITION SIZE
-  // ----------------------------------------
+  // Quantity allowed by available capital (no leverage)
+  const capitalBasedQuantity = Math.floor(
+    capital / entryPrice
+  );
 
-  const quantity = Math.floor(riskAmount / slPoints);
+  // Respect BOTH limits
+  const quantity = Math.min(
+    riskBasedQuantity,
+    capitalBasedQuantity
+  );
 
   if (quantity < 1) {
     throw new Error(
-      "Risk amount is too small for the selected Stop Loss."
+      "Insufficient capital or risk budget for even 1 share."
     );
   }
 
-  // ----------------------------------------
-  // TARGET DISTANCE
-  // ----------------------------------------
-
+  // Calculate target
   const targetPoints = slPoints * riskReward;
 
-  // ----------------------------------------
-  // TARGET PRICE
-  // ----------------------------------------
+  const targetPrice =
+    tradeType === "long"
+      ? entryPrice + targetPoints
+      : entryPrice - targetPoints;
 
-  let targetPrice;
-
-  if (tradeType === "long") {
-    targetPrice = entryPrice + targetPoints;
-  } else {
-    targetPrice = entryPrice - targetPoints;
-  }
-
-  // ----------------------------------------
-  // ACTUAL RISK
-  // ----------------------------------------
-
+  // Calculate actual risk and potential profit
   const actualRisk = quantity * slPoints;
-
-  // ----------------------------------------
-  // POTENTIAL PROFIT
-  // ----------------------------------------
-
   const potentialProfit = quantity * targetPoints;
+  const positionValue = quantity * entryPrice;
 
   return {
     riskAmount,
@@ -122,5 +101,8 @@ export function calculateRisk({
     targetPrice,
     actualRisk,
     potentialProfit,
+    positionValue,
+    capitalBasedQuantity,
+    riskBasedQuantity,
   };
 }
